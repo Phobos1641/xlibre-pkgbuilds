@@ -1,6 +1,5 @@
-# Maintainer: artist for Artix Linux
-# PKGBUILD for Artix Linux and Arch Linux and derivatives
-# v1.0
+# Maintainer: Lysander Sokolov <kijinmaru[at]noreply[dot]pm[dot]me>
+# Contributor: artist for Artix Linux
 
 pkgbase=xlibre-xserver
 pkgname=($pkgbase-git $pkgbase-xephyr-git $pkgbase-xvfb-git $pkgbase-xnest-git $pkgbase-common-git $pkgbase-devel-git)
