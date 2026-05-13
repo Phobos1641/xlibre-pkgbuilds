@@ -85,6 +85,8 @@ build() {
 
   # fake installation to be seperated into packages
   DESTDIR="${srcdir}/fakeinstall" ninja -C build install
+
+  rm "${srcdir}"/fakeinstall/etc/X11/xorg.conf.d/10-nvidia-modules.conf.debian
 }
 
 _install() {
@@ -136,8 +138,9 @@ package_xlibre-xserver-git() {
   _install fakeinstall/usr/lib/Xorg{,.wrap}
   _install fakeinstall/usr/lib/xorg/modules/*
   _install fakeinstall/usr/share/X11/xorg.conf.d/10-nvidia.conf
+  _install fakeinstall/usr/share/X11/xorg.conf.d/10-nvidia-modules.conf
   _install fakeinstall/usr/share/X11/xorg.conf.d/10-quirks.conf
-  _install fakeinstall/usr/share/man/man1/{Xorg,Xorg.wrap,gtf}.1
+  _install fakeinstall/usr/share/man/man1/{Xorg,Xorg.wrap,Xkdrive,gtf}.1
   _install fakeinstall/usr/share/man/man4/{exa,fbdevhw,inputtestdrv,modesetting}.4
   _install fakeinstall/usr/share/man/man5/{Xwrapper.config,xorg.conf,xorg.conf.d}.5
 
@@ -224,6 +227,7 @@ package_xlibre-xserver-devel-git() {
   _install fakeinstall/usr/include/xorg/*
   _install fakeinstall/usr/lib/pkgconfig/xorg-server.pc
   _install fakeinstall/usr/share/aclocal/xorg-server.m4
+  _install fakeinstall/usr/lib/pkgconfig/xlibre-server.pc
 
   # license
   install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" xserver/COPYING
