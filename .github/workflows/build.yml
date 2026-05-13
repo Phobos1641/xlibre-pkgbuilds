@@ -99,7 +99,7 @@ jobs:
           # about to build. We only need the headers from -common and
           # -devel to compile, so install those with --nodeps and skip the
           # transitive xserver-git install entirely for this job.
-          pacman -U --noconfirm --nodeps \
+          pacman -Udd --noconfirm \
             xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
 
