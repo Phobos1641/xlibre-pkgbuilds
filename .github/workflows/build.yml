@@ -40,11 +40,8 @@ on:
         type: boolean
         default: true
 
-permissions:
-  contents: write          # required to create the Release and push the tag
-
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -56,8 +53,15 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+    timeout-minutes: 10
 
     steps:
+      - uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ github.run_id }}
+          restore-keys: pacman-
+
       - name: Sync pacman and add tooling
         run: |
           pacman -Syu --noconfirm
@@ -99,8 +103,15 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+    timeout-minutes: 10
 
     steps:
+      - uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ github.run_id }}
+          restore-keys: pacman-
+
       - name: Sync pacman and add tooling
         run: |
           pacman -Syu --noconfirm
@@ -160,8 +171,15 @@ jobs:
       image: archlinux:base-devel
     outputs:
       tag: ${{ steps.stage.outputs.tag }}
+    timeout-minutes: 15
 
     steps:
+      - uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ github.run_id }}
+          restore-keys: pacman-
+
       - name: Sync pacman and add tooling
         run: |
           pacman -Syu --noconfirm
@@ -216,8 +234,15 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+    timeout-minutes: 10
 
     steps:
+      - uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ github.run_id }}
+          restore-keys: pacman-
+
       - name: Sync pacman and add tooling
         run: |
           pacman -Syu --noconfirm
@@ -278,6 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
@@ -306,6 +332,12 @@ jobs:
           - xlibre-video-vmware
 
     steps:
+      - uses: actions/cache@v4
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ github.run_id }}
+          restore-keys: pacman-
+
       - name: Sync pacman and add tooling
         run: |
           pacman -Syu --noconfirm
@@ -368,6 +400,9 @@ jobs:
       needs.xserver.result == 'success' &&
       (github.event_name == 'schedule' || inputs.release)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to create the Release and push the tag
+    timeout-minutes: 5
 
     steps:
       - uses: actions/download-artifact@v4
@@ -377,9 +412,8 @@ jobs:
       - name: Flatten artifacts (skip the stage-1 bootstrap)
         run: |
           mkdir -p release
-          find artifacts \
-            -name '*.pkg.tar.zst' \
-            -not -path '*/libinput-bootstrap/*' \
+          find artifacts -name '*.pkg.tar.zst' \
+            -not -path '*-bootstrap/*' \
             -exec cp -v {} release/ \;
           ls -la release/
 
@@ -418,3 +452,13 @@ jobs:
           files: release/*.pkg.tar.zst
           body_path: release_notes.md
           prerelease: true
+
+- name: Prune old nightly prereleases (keep 5 newest)
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    gh release list --limit 100 \
+      --json tagName,isPrerelease,createdAt \
+      --jq '[.[] | select(.isPrerelease and (.tagName|startswith("nightly-")))] |
+            sort_by(.createdAt) | reverse | .[5:] | .[].tagName' \
+      | xargs -r -n1 -I{} gh release delete {} --yes --cleanup-tag
