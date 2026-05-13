@@ -1,0 +1,61 @@
+name: 'Build Arch package'
+description: >
+  Set up an Arch base-devel container build environment, optionally install
+  extra repo packages and run a pre-build hook (e.g. to install local .pkg
+  files from artifacts), then run makepkg and stage the outputs into ./out.
+
+inputs:
+  pkg-dir:
+    description: 'Subdirectory containing the PKGBUILD to build'
+    required: true
+  extra-pacman-pkgs:
+    description: 'Extra pacman packages to install with pacman -Syu (space-separated)'
+    required: false
+    default: ''
+  pre-build:
+    description: |
+      Bash script run after pacman setup and the build user has been created,
+      but before makepkg. Use this to install local .pkg.tar.zst files
+      downloaded as artifacts from earlier jobs.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Cache pacman packages
+      uses: actions/cache@v4
+      with:
+        path: /var/cache/pacman/pkg
+        key: pacman-${{ github.run_id }}
+        restore-keys: pacman-
+
+    - name: Sync pacman and install tooling
+      shell: bash
+      run: pacman -Syu --needed --noconfirm git sudo ${{ inputs.extra-pacman-pkgs }}
+
+    - name: Create unprivileged build user
+      shell: bash
+      run: |
+        useradd -m builder 2>/dev/null || true
+        echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+    - name: Run pre-build hook
+      if: inputs.pre-build != ''
+      shell: bash
+      run: |
+        ${{ inputs.pre-build }}
+
+    - name: Build with makepkg
+      shell: bash
+      run: |
+        chown -R builder:builder .
+        cd "${{ inputs.pkg-dir }}"
+        sudo -u builder makepkg -s --noconfirm
+
+    - name: Stage outputs into ./out
+      shell: bash
+      run: |
+        mkdir -p out
+        cp "${{ inputs.pkg-dir }}"/*.pkg.tar.zst out/
+        ls -la out/
