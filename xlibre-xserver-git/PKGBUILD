@@ -85,6 +85,7 @@ build() {
   # fake installation to be seperated into packages
   DESTDIR="${srcdir}/fakeinstall" ninja -C build install
 
+  rm "${srcdir}"/fakeinstall/etc/X11/xorg.conf.d/10-nvidia.conf.debian
   rm "${srcdir}"/fakeinstall/etc/X11/xorg.conf.d/10-nvidia-modules.conf.debian
 }
 
