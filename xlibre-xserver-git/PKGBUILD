@@ -34,7 +34,7 @@ if [ -f /etc/artix-release ] ; then
 else
   makedepends+=('systemd')
 fi
-source=("git+${url}.git"
+source=("xserver::git+${url}.git"
         xvfb-run # with updates from FC master
         xvfb-run.1)
 
