@@ -90,7 +90,7 @@ jobs:
         #   xlibre-video-qxl          xlibre-video-sisusb   xlibre-video-vesa
         #   xlibre-video-vmware       xlibre-video-voodoo
         pkg:
-          - xlibre-input-libinput
+          - xlibre-input-libinput-git
           - xlibre-input-evdev
           - xlibre-video-amdgpu
           - xlibre-video-ati
