@@ -1,0 +1,203 @@
+name: Build XLibre packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Publish a GitHub Release with the built packages'
+        type: boolean
+        default: true
+      drivers:
+        description: 'Also build the driver matrix (longer build time)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write          # required to create the Release and push the tag
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build the xserver split package (produces 6 .pkg.tar.zst files)
+  # ---------------------------------------------------------------------------
+  xserver:
+    name: Build xlibre-xserver-git
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    outputs:
+      tag: ${{ steps.stage.outputs.tag }}
+
+    steps:
+      - name: Sync pacman and add tooling
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm git sudo xorg-server-devel
+
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+      - uses: actions/checkout@v4
+
+      - name: Build with makepkg
+        run: |
+          chown -R builder:builder .
+          cd xlibre-xserver-git
+          sudo -u builder makepkg -s --noconfirm
+
+      - name: Stage outputs and compute release tag
+        id: stage
+        run: |
+          mkdir -p out
+          cp xlibre-xserver-git/*.pkg.tar.zst out/
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TAG="nightly-$(date -u +%Y%m%d)-${SHORT_SHA}.${GITHUB_RUN_NUMBER}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          ls -la out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xlibre-xserver
+          path: out/*.pkg.tar.zst
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 2. Build each driver package against the freshly built xserver headers
+  # ---------------------------------------------------------------------------
+  drivers:
+    name: Build ${{ matrix.pkg }}
+    needs: xserver
+    if: github.event_name == 'schedule' || inputs.drivers
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Common defaults. Add/remove to taste.
+        # Full set available upstream:
+        #   xlibre-input-elographics  xlibre-input-evdev    xlibre-input-joystick
+        #   xlibre-input-libinput     xlibre-input-mouse    xlibre-input-synaptics
+        #   xlibre-input-vmmouse      xlibre-input-void     xlibre-input-wacom
+        #   xlibre-video-amdgpu       xlibre-video-ati      xlibre-video-dummy
+        #   xlibre-video-fbdev        xlibre-video-intel    xlibre-video-nouveau
+        #   xlibre-video-qxl          xlibre-video-sisusb   xlibre-video-vesa
+        #   xlibre-video-vmware       xlibre-video-voodoo
+        pkg:
+          - xlibre-input-libinput
+          - xlibre-input-evdev
+          - xlibre-video-amdgpu
+          - xlibre-video-ati
+          - xlibre-video-intel
+          - xlibre-video-nouveau
+          - xlibre-video-vesa
+          - xlibre-video-fbdev
+
+    steps:
+      - name: Sync pacman and add tooling
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm git sudo
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: xlibre-xserver
+          path: xserver-pkgs
+
+      - name: Install xlibre xserver headers from the previous job
+        run: |
+          # Drivers build against the freshly-built xlibre xserver devel
+          # headers, not the bootstrap xorg-server-devel.
+          pacman -U --noconfirm \
+            xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
+            xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
+
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+      - uses: actions/checkout@v4
+
+      - name: Build with makepkg
+        run: |
+          chown -R builder:builder .
+          cd ${{ matrix.pkg }}
+          sudo -u builder makepkg -s --noconfirm
+
+      - name: Stage outputs
+        run: |
+          mkdir -p out
+          cp ${{ matrix.pkg }}/*.pkg.tar.zst out/
+          ls -la out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: driver-${{ matrix.pkg }}
+          path: out/*.pkg.tar.zst
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 3. Collect all artifacts and publish a single Release
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish GitHub Release
+    needs: [xserver, drivers]
+    # Release if the xserver succeeded and the user asked for it. Drivers are
+    # treated as best-effort - a single failing driver won't block publishing.
+    if: |
+      always() &&
+      needs.xserver.result == 'success' &&
+      (github.event_name == 'schedule' || inputs.release)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts into one directory
+        run: |
+          mkdir -p release
+          find artifacts -name '*.pkg.tar.zst' -exec cp -v {} release/ \;
+          ls -la release/
+
+      - name: Generate release notes
+        run: |
+          {
+            echo "Automated build of the XLibre Arch Linux packages."
+            echo ""
+            echo "**PKGBUILD commit:** \`${GITHUB_SHA}\`"
+            echo "**Built:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
+            echo "## Packages included"
+            echo ""
+            for f in release/*.pkg.tar.zst; do
+              [ -e "$f" ] || continue
+              echo "- \`$(basename "$f")\`"
+            done
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo 'Download what you need and install with `sudo pacman -U <file>.pkg.tar.zst`.'
+            echo "Order matters: install \`xlibre-xserver-common-git\` and \`xlibre-xserver-git\` first, then the drivers."
+            echo "See the [official XLibre Arch procedure](https://github.com/X11Libre/pkgbuilds-arch-based#packages-build-procedure) for the full swap-from-xorg-server walkthrough."
+            echo ""
+            echo "These are unsigned builds of HEAD-of-master code. Use at your own risk."
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.xserver.outputs.tag }}
+          name: XLibre ${{ needs.xserver.outputs.tag }}
+          files: release/*.pkg.tar.zst
+          body_path: release_notes.md
+          prerelease: true
