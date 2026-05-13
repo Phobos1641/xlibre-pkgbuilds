@@ -55,7 +55,7 @@ jobs:
     outputs:
       matrix: ${{ steps.list.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: list
         run: |
           MATRIX=$(ls -d xlibre-input-* xlibre-video-* 2>/dev/null \
@@ -75,12 +75,12 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/build-arch-pkg
         with:
           pkg-dir: xlibre-xserver-bootstrap
           extra-pacman-pkgs: xorg-server-devel
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xlibre-xserver-bootstrap
           path: out/*.pkg.tar.zst
@@ -99,8 +99,8 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
           name: xlibre-xserver-bootstrap
           path: xserver-bootstrap
@@ -115,7 +115,7 @@ jobs:
             pacman -U --noconfirm \
               xserver-bootstrap/*.pkg.tar.zst \
               /var/cache/pacman/pkg/xf86-input-libinput-*.pkg.tar.zst
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xlibre-input-libinput-bootstrap
           path: out/*.pkg.tar.zst
@@ -134,8 +134,8 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
           name: xlibre-input-libinput-bootstrap
           path: libinput-bootstrap
@@ -151,7 +151,7 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
           echo "tag=nightly-$(date -u +%Y%m%d)-${SHORT_SHA}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xlibre-xserver
           path: out/*.pkg.tar.zst
@@ -169,12 +169,12 @@ jobs:
     container:
       image: archlinux:base-devel
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
           name: xlibre-xserver
           path: xserver-pkgs
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: xlibre-input-libinput-bootstrap
           path: libinput-bootstrap
@@ -187,7 +187,7 @@ jobs:
               xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
               xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
               xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xlibre-input-libinput
           path: out/*.pkg.tar.zst
@@ -214,12 +214,12 @@ jobs:
       matrix:
         pkg: ${{ fromJson(needs.discover-drivers.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
           name: xlibre-xserver
           path: xserver-pkgs
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: xlibre-input-libinput
           path: libinput-pkgs
@@ -232,7 +232,7 @@ jobs:
               xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
               xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
               xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.pkg }}
           path: out/*.pkg.tar.zst
@@ -257,7 +257,7 @@ jobs:
       contents: write       # narrow write scope to this job only
 
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
 
@@ -332,7 +332,7 @@ jobs:
           cat release_notes.md
 
       - name: Publish Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.xserver.outputs.tag }}
           name: XLibre ${{ needs.xserver.outputs.tag }}
