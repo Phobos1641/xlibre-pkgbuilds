@@ -115,6 +115,7 @@ jobs:
           # Drivers build against the freshly-built xlibre xserver devel
           # headers, not the bootstrap xorg-server-devel.
           pacman -U --noconfirm \
+            xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
 
