@@ -56,12 +56,12 @@ build() {
     _meson="arch-meson"
   fi
 
-  export CFLAGS=${CFLAGS/-fno-plt}
-  export CXXFLAGS=${CXXFLAGS/-fno-plt}
-  export LDFLAGS=${LDFLAGS/-Wl,-z,now}
+  export CFLAGS="${CFLAGS/-fno-plt} -march=corei7 -O2 -g"
+  export CXXFLAGS="${CXXFLAGS/-fno-plt} -march=corei7 -O2 -g"
+  export LDFLAGS="${LDFLAGS/-Wl,-z,now}"
 
   $_meson xserver build \
-    --buildtype=debugoptimized \
+    --buildtype=plain \
     -D ipv6=true \
     -D xvfb=true \
     -D xnest=true \

@@ -35,20 +35,6 @@ pkgver() (
 )
 
 build() {
-  case "$CARCH" in
-    "x86_64")
-      CFLAGS=" -march=x86-64"
-      ;;
-    "aarch64")
-      CFLAGS=" -march=armv8-a"
-      ;;
-    *)
-      CFLAGS=" -march=native"
-      ;;
-  esac
-  CFLAGS+=" -mtune=generic -O2 -pipe -fexceptions -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security"
-  CFLAGS+=" -fstack-clash-protection -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"
-  LDFLAGS=" -Wl,-O1 -Wl,--sort-common -Wl,--as-needed -Wl,-z,lazy -Wl,-z,relro -Wl,-z,pack-relative-relocs"
   if [[ $CARCH != 'aarch64' ]]; then
     CFLAGS+=" -fcf-protection"
   fi
@@ -60,7 +46,23 @@ build() {
     CFLAGS+=" -fno-lto"
     LDFLAGS+=" -fno-lto"
   fi
-  CXXFLAGS="${CFLAGS} -Wp,-D_GLIBCXX_ASSERTIONS"
+
+  CFLAGS+=" -pipe -fexceptions -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security"
+  CFLAGS+=" -fstack-clash-protection -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"
+  LDFLAGS=" -Wl,-O1 -Wl,--sort-common -Wl,--as-needed -Wl,-z,lazy -Wl,-z,relro -Wl,-z,pack-relative-relocs"
+
+  CFLAGS="${CFLAGS/-fno-plt} -O2 -g"
+  CXXFLAGS="${CXXFLAGS/-fno-plt} -O2 -g -Wp,-D_GLIBCXX_ASSERTIONS"
+
+  case "$CARCH" in
+    "aarch64")
+      CFLAGS=" -march=armv8-a"
+      ;;
+    *)
+      CFLAGS=" -march=corei7"
+      ;;
+  esac
+
   export CFLAGS="${CFLAGS}"
   export CXXFLAGS="${CXXFLAGS}"
   export LDFLAGS="${LDFLAGS}"
