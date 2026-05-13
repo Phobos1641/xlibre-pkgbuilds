@@ -8,7 +8,7 @@ on:
         type: boolean
         default: true
       drivers:
-        description: 'Also build the driver matrix (longer build time)'
+        description: 'Also build libinput and the driver matrix (longer build time)'
         type: boolean
         default: true
 
@@ -67,11 +67,73 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # 2. Build each driver package against the freshly built xserver headers
+  # 2. Build xlibre-input-libinput-git against the freshly built xserver headers
+  #
+  # This sits between the xserver and driver jobs because the rest of the
+  # driver matrix needs libinput to be installable when pacman -U pulls in
+  # xlibre-xserver-git as a transitive dependency of xlibre-xserver-devel-git.
+  # ---------------------------------------------------------------------------
+  libinput:
+    name: Build xlibre-input-libinput-git
+    needs: xserver
+    if: github.event_name == 'schedule' || inputs.drivers
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Sync pacman and add tooling
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm git sudo
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: xlibre-xserver
+          path: xserver-pkgs
+
+      - name: Seed xserver headers (forced - breaks the bootstrap cycle)
+        run: |
+          # xlibre-xserver-devel-git depends on xlibre-xserver-git, which
+          # in turn depends on xlibre-input-libinput - the package we're
+          # about to build. We only need the headers from -common and
+          # -devel to compile, so install those with --nodeps and skip the
+          # transitive xserver-git install entirely for this job.
+          pacman -U --noconfirm --nodeps \
+            xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
+            xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
+
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+      - uses: actions/checkout@v4
+
+      - name: Build with makepkg
+        run: |
+          chown -R builder:builder .
+          cd xlibre-input-libinput-git
+          sudo -u builder makepkg -s --noconfirm
+
+      - name: Stage outputs
+        run: |
+          mkdir -p out
+          cp xlibre-input-libinput-git/*.pkg.tar.zst out/
+          ls -la out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xlibre-input-libinput-git
+          path: out/*.pkg.tar.zst
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 3. Build each remaining driver against the now-complete xserver+libinput
   # ---------------------------------------------------------------------------
   drivers:
     name: Build ${{ matrix.pkg }}
-    needs: xserver
+    needs: [xserver, libinput]
     if: github.event_name == 'schedule' || inputs.drivers
     runs-on: ubuntu-latest
     container:
@@ -80,17 +142,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Common defaults. Add/remove to taste.
+        # xlibre-input-libinput is built in its own job above and is NOT in
+        # this matrix. Add/remove from the list to taste.
         # Full set available upstream:
         #   xlibre-input-elographics  xlibre-input-evdev    xlibre-input-joystick
-        #   xlibre-input-libinput     xlibre-input-mouse    xlibre-input-synaptics
+        #   xlibre-input-mouse        xlibre-input-synaptics
         #   xlibre-input-vmmouse      xlibre-input-void     xlibre-input-wacom
         #   xlibre-video-amdgpu       xlibre-video-ati      xlibre-video-dummy
         #   xlibre-video-fbdev        xlibre-video-intel    xlibre-video-nouveau
         #   xlibre-video-qxl          xlibre-video-sisusb   xlibre-video-vesa
         #   xlibre-video-vmware       xlibre-video-voodoo
         pkg:
-          - xlibre-input-libinput-git
           - xlibre-input-evdev
           - xlibre-video-amdgpu
           - xlibre-video-ati
@@ -110,13 +172,21 @@ jobs:
           name: xlibre-xserver
           path: xserver-pkgs
 
-      - name: Install xlibre xserver headers from the previous job
+      - uses: actions/download-artifact@v4
+        with:
+          name: xlibre-input-libinput-git
+          path: libinput-pkgs
+
+      - name: Install the full xlibre xserver chain
         run: |
-          # Drivers build against the freshly-built xlibre xserver devel
-          # headers, not the bootstrap xorg-server-devel.
+          # Pacman treats all local packages in one -U call as a single
+          # transaction and resolves install order itself. Remote deps
+          # are fetched from the configured repos. Now that libinput is
+          # present the chain installs cleanly without --nodeps.
           pacman -U --noconfirm \
-            xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
+            libinput-pkgs/xlibre-input-libinput-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
+            xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
 
       - name: Create unprivileged build user
@@ -145,13 +215,14 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # 3. Collect all artifacts and publish a single Release
+  # 4. Collect every artifact and publish a single Release
   # ---------------------------------------------------------------------------
   release:
     name: Publish GitHub Release
-    needs: [xserver, drivers]
-    # Release if the xserver succeeded and the user asked for it. Drivers are
-    # treated as best-effort - a single failing driver won't block publishing.
+    needs: [xserver, libinput, drivers]
+    # Release if the xserver succeeded and the user asked for it. libinput
+    # and drivers are treated as best-effort - failures there will leave
+    # those packages out of the Release but won't block it.
     if: |
       always() &&
       needs.xserver.result == 'success' &&
@@ -187,7 +258,9 @@ jobs:
             echo "## Installation"
             echo ""
             echo 'Download what you need and install with `sudo pacman -U <file>.pkg.tar.zst`.'
-            echo "Order matters: install \`xlibre-xserver-common-git\` and \`xlibre-xserver-git\` first, then the drivers."
+            echo "Order matters: install \`xlibre-input-libinput-git\` first,"
+            echo "then \`xlibre-xserver-common-git\`, \`xlibre-xserver-git\` and \`xlibre-xserver-devel-git\`"
+            echo "in one pacman call, then the rest of the drivers."
             echo "See the [official XLibre Arch procedure](https://github.com/X11Libre/pkgbuilds-arch-based#packages-build-procedure) for the full swap-from-xorg-server walkthrough."
             echo ""
             echo "These are unsigned builds of HEAD-of-master code. Use at your own risk."
