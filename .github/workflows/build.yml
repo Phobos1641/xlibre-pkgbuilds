@@ -202,6 +202,11 @@ jobs:
     if: inputs.drivers
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Allow individual matrix entries to fail without failing the workflow.
+    # Each failed driver is still visible (red X) on the run's page, but the
+    # overall run reports success so no failure email is sent. The release
+    # job's flatten step picks up whatever did succeed.
+    continue-on-error: true
     container:
       image: archlinux:base-devel
     strategy:
@@ -238,7 +243,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Publish GitHub Release
-    needs: [xserver, libinput, drivers]
+    needs: [discover-drivers, xserver, libinput, drivers]
     # Release if the xserver succeeded and the user asked for it. libinput
     # and drivers are best-effort - a failed individual driver leaves it out
     # of the Release but does not block publishing.
@@ -264,6 +269,40 @@ jobs:
             -not -path '*-bootstrap/*' \
             -exec cp -v {} release/ \;
           ls -la release/
+
+      - name: Diff built drivers against the discovered matrix
+        if: needs.discover-drivers.result == 'success'
+        run: |
+          MATRIX='${{ needs.discover-drivers.outputs.matrix }}'
+          if [ -z "$MATRIX" ] || [ "$MATRIX" = "[]" ]; then
+            echo "Empty matrix; nothing to diff."
+            exit 0
+          fi
+
+          # Extract <pkgname> from each .pkg.tar.zst by stripping the trailing
+          # -<pkgver>-<pkgrel>-<arch> components per Arch's naming convention.
+          BUILT=$(for f in release/*.pkg.tar.zst; do
+            [ -e "$f" ] || continue
+            basename "$f" .pkg.tar.zst | sed -E 's/-[^-]+-[^-]+-[^-]+$//'
+          done | sort -u)
+
+          EXPECTED=$(jq -r '.[]' <<< "$MATRIX" | sort -u)
+          MISSING=$(comm -23 <(echo "$EXPECTED") <(echo "$BUILT"))
+
+          if [ -n "$MISSING" ]; then
+            {
+              echo "## :warning: Drivers that failed to build"
+              echo ""
+              echo "The following drivers were in the build matrix but did not produce a package:"
+              echo ""
+              echo "$MISSING" | sed 's/^/- `/; s/$/`/'
+              echo ""
+              echo "Check the failed matrix entries on this run's page for build logs."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Missing drivers: $(echo "$MISSING" | tr '\n' ' ')"
+          else
+            echo "## :white_check_mark: All discovered drivers built successfully" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Generate release notes
         run: |
