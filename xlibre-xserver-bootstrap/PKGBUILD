@@ -1,0 +1,106 @@
+# Maintainer: Lysander Sokolov <kijinmaru[at]noreply[dot]pm[dot]me>
+
+pkgname=xlibre-xserver-bootstrap
+pkgver=25.1.5.r715.cae899cd2
+pkgrel=1
+pkgdesc="XLibre X server (bootstrap)"
+arch=('x86_64')
+license=('LicenseRef-Adobe-Display-PostScript'
+         'BSD-3-Clause'
+         'LicenseRef-DEC-3-Clause'
+         'HPND'
+         'LicenseRef-HPND-sell-MIT-disclaimer-xserver'
+         'HPND-sell-variant'
+         'ICU'
+         'ISC'
+         'MIT'
+         'MIT-open-group'
+         'NTP'
+         'SGI-B-2.0'
+         'SMLNJ'
+         'X11'
+         'X11-distribute-modifications-variant')
+url="https://github.com/Phobos1641/xlibre-xserver"
+depends=('dbus' 'glibc' 'libdrm' 'libepoxy' 'libgl' 'libpciaccess' 'libtirpc'
+         'libunwind' 'libxau' 'libxcvt' 'libxdmcp' 'libxfont2' 'libmd'
+         'libxshmfence>=1.1' 'nettle' 'pixman>=0.27.2' 'sh'
+         'systemd-libs>=209'
+         'xkeyboard-config' 'xorg-xkbcomp' 'xorg-setxkbmap' 'xorg-util-macros'
+         'libunwind' 'libbsd' 'mesa' 'xorgproto>=7.0.31')
+makedepends=('xorgproto' 'pixman' 'libx11' 'mesa' 'mesa-libgl' 'xtrans'
+             'libxkbfile' 'libxfont2' 'libpciaccess' 'libxv' 'libxcvt'
+             'libxmu' 'libxrender' 'libxi' 'libxaw' 'libxtst' 'libxres'
+             'xorg-xkbcomp' 'xorg-util-macros' 'xorg-font-util' 'libepoxy'
+             'xcb-util' 'xcb-util-image' 'xcb-util-renderutil' 'xcb-util-wm' 'xcb-util-keysyms'
+             'libxshmfence' 'libunwind' 'meson' 'git')
+if [ -f /etc/artix-release ] ; then
+  makedepends+=('elogind')
+else
+  makedepends+=('systemd')
+fi
+# see xlibre-xserver*/hw/xfree86/common/xf86Module.h for ABI versions - we provide major numbers that drivers can depend on
+# and /usr/lib/pkgconfig/xorg-server.pc in xlibre-xserver-devel pkg
+provides=('xlibre-xserver'
+          'X-ABI-VIDEODRV_VERSION=28.0' 'X-ABI-XINPUT_VERSION=24.4' 'X-ABI-EXTENSION_VERSION=11.0'
+          "xorg-server=${pkgver//.r*}" "xorg-server-common=${pkgver//.r*}" "xorg-server-devel=${pkgver//.r*}")
+conflicts=(xlibre-xserver xlibre-xserver-common xlibre-xserver-devel
+           xorg-server xorg-server-common xorg-server-devel
+           'nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting')
+options=('!strip' '!debug' 'emptydirs')
+source=(xserver::git+https://github.com/Phobos1641/xlibre-xserver.git)
+b2sums=('SKIP')
+
+pkgver() {
+  cd xserver
+  local tag ver rev hash
+  tag="$(git tag -l "xlibre-xserver-*" --sort=-v:refname | head -n1)"
+  ver="${tag#xlibre-xserver-}"
+  rev="$(git rev-list --count "$tag"..HEAD)"
+  hash="$(git rev-parse --short HEAD)"
+  printf "%s.r%s.%s" "$ver" "$rev" "$hash"
+}
+
+build() {
+  if [ -f /etc/artix-release ] ; then
+    _meson="artix-meson"
+  else
+    _meson="arch-meson"
+  fi
+
+  export CFLAGS=${CFLAGS/-fno-plt}
+  export CXXFLAGS=${CXXFLAGS/-fno-plt}
+  export LDFLAGS=${LDFLAGS/-Wl,-z,now}
+
+  $_meson xserver build \
+    --buildtype=debugoptimized \
+    -D ipv6=true \
+    -D xvfb=false \
+    -D xnest=false \
+    -D xcsecurity=true \
+    -D xorg=true \
+    -D xephyr=false \
+    -D glamor=true \
+    -D udev=true \
+    -D udev_kms=true \
+    -D dtrace=false \
+    -D systemd_logind=true \
+    -D suid_wrapper=true \
+    -D linux_acpi=false \
+    -D xkb_dir=/usr/share/X11/xkb \
+    -D xkb_output_dir=/var/lib/xkb \
+    -D libunwind=true \
+    -D tests=true
+
+  # Print config
+  meson configure build
+  ninja -C build
+}
+
+package() {
+  DESTDIR="${pkgdir}" meson install -C build
+
+  install -vdm755 "${pkgdir}"/etc/X11/xorg.conf.d
+
+  # xephyr, xnest, xvfb
+  find "${pkgdir}" -type f,l \( -name '*Xephyr*' -o -name '*Xnest*' -o -name '*Xvfb*' \) -delete
+}

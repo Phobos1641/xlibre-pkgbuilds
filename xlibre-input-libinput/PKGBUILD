@@ -10,7 +10,7 @@ arch=('x86_64' 'aarch64')
 license=('MIT')
 url="https://github.com/X11Libre"
 depends=('libinput' 'glibc')
-makedepends=('xorg-server-devel' 'X-ABI-XINPUT_VERSION' 
+makedepends=('xorg-server-devel' 'X-ABI-XINPUT_VERSION'
   'autoconf' 'automake' 'binutils' 'fakeroot' 'findutils' 
   'gawk' 'gcc' 'gettext' 'gzip' 'libtool' 'm4' 'make' 'patch' 'pkgconf'
   'libxi' 'libx11' 'xorgproto' 'libxfont2')

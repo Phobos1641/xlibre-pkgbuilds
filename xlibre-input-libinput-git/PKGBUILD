@@ -14,14 +14,14 @@ depends=('libinput' 'glibc')
 makedepends=('git' 'xorg-server-devel' 'X-ABI-XINPUT_VERSION'
   'autoconf' 'automake' 'binutils' 'fakeroot' 'findutils'
   'gawk' 'gcc' 'gettext' 'gzip' 'libtool' 'm4' 'make' 'patch' 'pkgconf'
-  'libxi' 'libx11' 'xorgproto' 'libxfont2')
-conflicts=("xlibre-${_pkgname}" ${_pkgname} 'xorg-server<1.19.0')
+  'libxi' 'libx11' 'xorgproto' 'libxfont2' 'xorg-util-macros' 'pixman')
+conflicts=(xlibre-input-libinput "xlibre-${_pkgname}" ${_pkgname} 'xorg-server<1.19.0')
 replaces=("xlibre-${_pkgname}")
-provides=("xlibre-${_pkgname}" "${_pkgname}")
+provides=(xlibre-input-libinput "xlibre-${_pkgname}" "${_pkgname}")
 source=($_pkgname::git+https://github.com/Phobos1641/xlibre-xf86-input-libinput.git#branch=master)
 b2sums=('SKIP')
 groups=('xlibre-drivers')
-options=('!debug')
+options=('!strip' '!debug')
 
 pkgver() (
   set -o pipefail

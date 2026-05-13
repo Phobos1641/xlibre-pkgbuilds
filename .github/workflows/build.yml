@@ -49,15 +49,13 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Build the xserver split package (produces 6 .pkg.tar.zst files)
+  # 1. Build the xserver bootstrap package
   # ---------------------------------------------------------------------------
-  xserver:
-    name: Build xlibre-xserver-git
+  xserver-bootstrap:
+    name: Build xlibre-xserver-bootstrap
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
-    outputs:
-      tag: ${{ steps.stage.outputs.tag }}
 
     steps:
       - name: Sync pacman and add tooling
@@ -75,33 +73,28 @@ jobs:
       - name: Build with makepkg
         run: |
           chown -R builder:builder .
-          cd xlibre-xserver-git
+          cd xlibre-xserver-bootstrap
           sudo -u builder makepkg -s --noconfirm
 
-      - name: Stage outputs and compute release tag
-        id: stage
+      - name: Stage outputs
         run: |
           mkdir -p out
-          cp xlibre-xserver-git/*.pkg.tar.zst out/
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          TAG="nightly-$(date -u +%Y%m%d)-${SHORT_SHA}.${GITHUB_RUN_NUMBER}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          cp xlibre-xserver-bootstrap/*.pkg.tar.zst out/
           ls -la out/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xlibre-xserver
+          name: xlibre-bootstrap
           path: out/*.pkg.tar.zst
-          retention-days: 14
+          retention-days: 7
 
   # ---------------------------------------------------------------------------
-  # 2. Stage 1: bootstrap libinput against a force-installed xlibre xserver
-  #             plus Arch's stock xf86-input-libinput as an input stand-in.
+  # 2. Stage 1: Bootstrap libinput against the xlibre-xserver-bootstrap package.
   #             This artifact is intermediate and is NOT shipped in the Release.
   # ---------------------------------------------------------------------------
   libinput-bootstrap:
-    name: Build xlibre-input-libinput-git (stage 1, bootstrap)
-    needs: xserver
+    name: Build xlibre-input-libinput (bootstrap)
+    needs: xserver-bootstrap
     if: github.event_name == 'schedule' || inputs.drivers
     runs-on: ubuntu-latest
     container:
@@ -122,21 +115,13 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: xlibre-xserver
-          path: xserver-pkgs
+          name: xlibre-bootstrap
+          path: xserver-bootstrap
 
       - name: Force-install xlibre xserver chain + stock xf86-input-libinput
         run: |
-          # -Udd bypasses every dependency check, including the
-          # xlibre-xserver-git -> xlibre-input-libinput requirement that we
-          # cannot satisfy yet. --overwrite '*' is included as a belt-and-
-          # braces against any file conflict between the xlibre xserver and
-          # the stock xf86-input-libinput stand-in; the container is
-          # ephemeral so trampling files here is harmless.
-          pacman -Udd --overwrite '*' --noconfirm \
-            xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
-            xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
-            xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst \
+          pacman -U --noconfirm \
+            xserver-bootstrap/*.pkg.tar.zst \
             /var/cache/pacman/pkg/xf86-input-libinput-*.pkg.tar.zst
 
       - name: Create unprivileged build user
@@ -165,11 +150,67 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
-  # 3. Stage 2: clean rebuild of libinput against the full xlibre xserver +
+  # 3. Build the xserver split package (produces 6 .pkg.tar.zst files)
+  # ---------------------------------------------------------------------------
+  xserver:
+    name: Build xlibre-xserver-git
+    needs: libinput-bootstrap
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    outputs:
+      tag: ${{ steps.stage.outputs.tag }}
+
+    steps:
+      - name: Sync pacman and add tooling
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm git sudo xorg-server-devel
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libinput-bootstrap
+          path: xserver-pkgs
+
+      - name: Install bootstrapped libinput
+        run: |
+          pacman -U --needed --noconfirm xserver-pkgs/xlibre-input-libinput-git-*.pkg.tar.zst
+
+      - name: Create unprivileged build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+
+      - uses: actions/checkout@v4
+
+      - name: Build with makepkg
+        run: |
+          chown -R builder:builder .
+          cd xlibre-xserver-git
+          sudo -u builder makepkg -s --noconfirm
+
+      - name: Stage outputs and compute release tag
+        id: stage
+        run: |
+          mkdir -p out
+          cp xlibre-xserver-git/*.pkg.tar.zst out/
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TAG="nightly-$(date -u +%Y%m%d)-${SHORT_SHA}.${GITHUB_RUN_NUMBER}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          ls -la out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xlibre-server
+          path: out/*.pkg.tar.zst
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 4. Stage 2: clean rebuild of libinput against the full xlibre xserver +
   #             stage-1 libinput. This is the package that ships.
   # ---------------------------------------------------------------------------
   libinput:
-    name: Build xlibre-input-libinput-git (stage 2, final)
+    name: Build xlibre-input-libinput
     needs: [xserver, libinput-bootstrap]
     if: github.event_name == 'schedule' || inputs.drivers
     runs-on: ubuntu-latest
@@ -184,7 +225,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: xlibre-xserver
+          name: xlibre-server
           path: xserver-pkgs
 
       - uses: actions/download-artifact@v4
@@ -197,7 +238,7 @@ jobs:
           # libinput now exists, so pacman resolves the four local packages
           # as a single transaction with no -Udd, no --nodeps, no overwrites.
           pacman -U --noconfirm \
-            libinput-bootstrap/xlibre-input-libinput-git-*.pkg.tar.zst \
+            libinput-bootstrap/*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-common-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-git-*.pkg.tar.zst \
             xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
@@ -228,7 +269,7 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # 4. Build each remaining driver against the full xlibre xserver + libinput
+  # 5. Build each remaining driver against the full xlibre xserver + libinput
   # ---------------------------------------------------------------------------
   drivers:
     name: Build ${{ matrix.pkg }}
@@ -272,7 +313,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: xlibre-xserver
+          name: xlibre-server
           path: xserver-pkgs
 
       - uses: actions/download-artifact@v4
@@ -314,7 +355,7 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
-  # 5. Collect every shipping artifact and publish a single Release
+  # 6. Collect every shipping artifact and publish a single Release
   # ---------------------------------------------------------------------------
   release:
     name: Publish GitHub Release

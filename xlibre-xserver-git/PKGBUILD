@@ -34,6 +34,7 @@ if [ -f /etc/artix-release ] ; then
 else
   makedepends+=('systemd')
 fi
+options=('!strip' '!debug')
 source=("xserver::git+${url}.git"
         xvfb-run # with updates from FC master
         xvfb-run.1)
@@ -60,7 +61,7 @@ build() {
   export LDFLAGS=${LDFLAGS/-Wl,-z,now}
 
   $_meson xserver build \
-    --buildtype=release \
+    --buildtype=debugoptimized \
     -D ipv6=true \
     -D xvfb=true \
     -D xnest=true \
@@ -83,7 +84,7 @@ build() {
   ninja -C build
 
   # fake installation to be seperated into packages
-  DESTDIR="${srcdir}/fakeinstall" ninja -C build install
+  DESTDIR="${srcdir}"/fakeinstall ninja -C build install
 
   rm "${srcdir}"/fakeinstall/etc/X11/xorg.conf.d/10-nvidia.conf.debian
   rm "${srcdir}"/fakeinstall/etc/X11/xorg.conf.d/10-nvidia-modules.conf.debian
@@ -104,8 +105,8 @@ _install() {
 package_xlibre-xserver-common-git() {
   pkgdesc="XLibre fork of X.Org Xorg server common files, development branch"
   depends=(xkeyboard-config xorg-xkbcomp xorg-setxkbmap)
-  provides=('xorg-server-common')
-  conflicts=('xorg-server-common' "xorg-server<$pkgver")
+  provides=("${pkgname//-git}=$pkgver-$pkgrel" 'xorg-server-common')
+  conflicts=("${pkgname//-git}" 'xorg-server-common' "xorg-server<$pkgver")
 
   _install fakeinstall/usr/lib/xorg/protocol.txt
   _install fakeinstall/usr/share/man/man1/Xserver.1
@@ -127,8 +128,8 @@ package_xlibre-xserver-git() {
   fi
   # see xorg-server-*/hw/xfree86/common/xf86Module.h for ABI versions - we provide major numbers that drivers can depend on
   # and /usr/lib/pkgconfig/xorg-server.pc in xorg-server-devel pkg
-  provides=('xorg-server' 'X-ABI-VIDEODRV_VERSION=28.0' 'X-ABI-XINPUT_VERSION=26.0' 'X-ABI-EXTENSION_VERSION=11.0' 'x-server' 'x11win-server')
-  conflicts=('xorg-server' 'nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting')
+  provides=("${pkgname//-git}=$pkgver-$pkgrel" 'xorg-server' 'X-ABI-VIDEODRV_VERSION=28.0' 'X-ABI-XINPUT_VERSION=26.0' 'X-ABI-EXTENSION_VERSION=11.0' 'x-server' 'x11win-server')
+  conflicts=("${pkgname//-git}" 'xorg-server' 'nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting')
   replaces=('glamor-egl' 'xf86-video-modesetting')
   optdepends=('12to11: Tool for running Wayland applications on XLibre'
               'kwin-x11-lite: kwin-x11 with ports from kwin-wayland, bug fixes, and maybe other improvements, for XLibre')
@@ -161,8 +162,8 @@ package_xlibre-xserver-xephyr-git() {
   else
     depends+=('systemd-libs')
   fi
-  provides=('xorg-server-xephyr')
-  conflicts=('xorg-server-xephyr')
+  provides=("${pkgname//-git}=$pkgver-$pkgrel" 'xorg-server-xephyr')
+  conflicts=("${pkgname//-git}" 'xorg-server-xephyr')
 
   _install fakeinstall/usr/bin/Xephyr
   _install fakeinstall/usr/share/man/man1/Xephyr.1
@@ -183,8 +184,8 @@ package_xlibre-xserver-xvfb-git() {
   else
     depends+=('systemd-libs')
   fi
-  provides=('xorg-server-xvfb')
-  conflicts=('xorg-server-xvfb')
+  provides=("${pkgname//-git}=$pkgver-$pkgrel" 'xorg-server-xvfb')
+  conflicts=("${pkgname//-git}" 'xorg-server-xvfb')
 
   _install fakeinstall/usr/bin/Xvfb
   _install fakeinstall/usr/share/man/man1/Xvfb.1
@@ -206,8 +207,8 @@ package_xlibre-xserver-xnest-git() {
   else
     depends+=('systemd-libs')
   fi
-  provides=('xorg-server-xnest')
-  conflicts=('xorg-server-xnest')
+  provides=("${pkgname//-git}=$pkgver-$pkgrel" 'xorg-server-xnest')
+  conflicts=("${pkgname//-git}" 'xorg-server-xnest')
 
   _install fakeinstall/usr/bin/Xnest
   _install fakeinstall/usr/share/man/man1/Xnest.1
@@ -218,11 +219,10 @@ package_xlibre-xserver-xnest-git() {
 
 package_xlibre-xserver-devel-git() {
   pkgdesc="XLibre fork of X.Org development files for the X.Org X server, development branch"
-  depends=('xlibre-xserver-git' 'X-ABI-XINPUT_VERSION=26.0' 'xorgproto' 'mesa' 'libpciaccess' 'pixman'
-           # not technically required but almost every Xorg pkg needs it to build
-           'xorg-util-macros')
-  provides=('xorg-server-devel')
-  conflicts=('xorg-server-devel')
+  depends=('libpciaccess' 'mesa' 'pixman>=0.27.2' 'xorgproto>=7.0.31'
+           'xorg-util-macros') # not technically required but almost every Xorg pkg needs it to build
+  provides=("${pkgname//-git}=$pkgver-$pkgrel" 'xorg-server-devel' 'xlibre-xserver-devel')
+  conflicts=("${pkgname//-git}" 'xorg-server-devel')
 
   _install fakeinstall/usr/include/xorg/*
   _install fakeinstall/usr/lib/pkgconfig/xorg-server.pc
