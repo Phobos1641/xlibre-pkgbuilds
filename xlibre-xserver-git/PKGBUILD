@@ -23,7 +23,7 @@ license=('LicenseRef-Adobe-Display-PostScript'
          'X11'
          'X11-distribute-modifications-variant')
 groups=('xlibre')
-url="https://github.com/X11Libre/xserver"
+url="https://github.com/Phobos1641/xlibre-xserver"
 makedepends=('xorgproto' 'pixman' 'libx11' 'mesa' 'mesa-libgl' 'xtrans'
              'libxkbfile' 'libxfont2' 'libpciaccess' 'libxv' 'libxcvt'
              'libxmu' 'libxrender' 'libxi' 'libxaw' 'libxtst' 'libxres'
