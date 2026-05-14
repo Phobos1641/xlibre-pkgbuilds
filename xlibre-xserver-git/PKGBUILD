@@ -62,6 +62,7 @@ build() {
 
   $_meson xserver build \
     --buildtype=plain \
+    -D legacy_nvidia_padding=true \
     -D ipv6=true \
     -D xvfb=true \
     -D xnest=true \
