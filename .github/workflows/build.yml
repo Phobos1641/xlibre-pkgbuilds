@@ -161,7 +161,7 @@ jobs:
   # 4. Stage-2 libinput - clean rebuild against the full xlibre xserver chain.
   # ---------------------------------------------------------------------------
   libinput:
-    name: Build xlibre-input-libinput
+    name: Build xlibre-input-libinput-git
     needs: [xserver, libinput-bootstrap]
     if: inputs.drivers
     runs-on: ubuntu-latest
@@ -189,7 +189,7 @@ jobs:
               xserver-pkgs/xlibre-xserver-devel-git-*.pkg.tar.zst
       - uses: actions/upload-artifact@v7
         with:
-          name: xlibre-input-libinput
+          name: xlibre-input-libinput-git
           path: out/*.pkg.tar.zst
           retention-days: 14
 
@@ -221,7 +221,7 @@ jobs:
           path: xserver-pkgs
       - uses: actions/download-artifact@v7
         with:
-          name: xlibre-input-libinput
+          name: xlibre-input-libinput-git
           path: libinput-pkgs
       - uses: ./.github/actions/build-arch-pkg
         with:
@@ -322,7 +322,7 @@ jobs:
             echo "## Installation"
             echo ""
             echo 'Download what you need and install with `sudo pacman -U <file>.pkg.tar.zst`.'
-            echo "Order matters: install \`xlibre-input-libinput-git\` first,"
+            echo "Order matters: install \`xlibre-input-libinput(-git)\` first,"
             echo "then \`xlibre-xserver-common-git\`, \`xlibre-xserver-git\` and \`xlibre-xserver-devel-git\`"
             echo "in one pacman call, then the rest of the drivers."
             echo "See the [official XLibre Arch procedure](https://github.com/X11Libre/pkgbuilds-arch-based#packages-build-procedure) for the full swap-from-xorg-server walkthrough."
