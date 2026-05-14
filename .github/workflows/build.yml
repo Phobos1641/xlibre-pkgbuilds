@@ -59,7 +59,7 @@ jobs:
       - id: list
         run: |
           MATRIX=$(ls -d xlibre-input-* xlibre-video-* 2>/dev/null \
-            | grep -vE '^xlibre-input-libinput($|-)' \
+            | grep -vE '^xlibre-input-libinput-' \
             | grep -vE -- '-bootstrap$' \
             | jq -R . | jq -sc .)
           echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
