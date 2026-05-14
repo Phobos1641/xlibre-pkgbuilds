@@ -150,7 +150,7 @@ jobs:
         id: tag
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          echo "tag=nightly-$(date -u +%Y%m%d)-${SHORT_SHA}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "tag=nightly-$(date -u +%Y%m%d)-${GITHUB_RUN_NUMBER}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           name: xlibre-xserver
